@@ -82,7 +82,9 @@ int FakeSocketHandler::connect(const std::string&, int) {
   }
 }
 
-int FakeSocketHandler::listen(int) {
+void FakeSocketHandler::listen(int) {}
+
+int FakeSocketHandler::accept(int) {
   std::lock_guard<std::mutex> guard(handlerMutex);
   if (futureConnections.empty()) {
     return -1;
@@ -94,7 +96,7 @@ int FakeSocketHandler::listen(int) {
   return retval;
 }
 
-void FakeSocketHandler::stopListening() {}
+void FakeSocketHandler::stopListening(int) {}
 
 void FakeSocketHandler::close(int fd) {
   std::lock_guard<std::mutex> guard(handlerMutex);
@@ -128,4 +130,4 @@ bool FakeSocketHandler::hasPendingConnection() {
   std::lock_guard<std::mutex> guard(handlerMutex);
   return !futureConnections.empty();
 }
-}
+}  // namespace et

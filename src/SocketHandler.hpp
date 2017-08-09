@@ -11,7 +11,8 @@ class SocketHandler {
   virtual ssize_t write(int fd, const void* buf, size_t count) = 0;
 
   void readAll(int fd, void* buf, size_t count, bool timeout);
-  void writeAll(int fd, const void* buf, size_t count, bool timeout);
+  int writeAllOrReturn(int fd, const void* buf, size_t count);
+  void writeAllOrThrow(int fd, const void* buf, size_t count, bool timeout);
 
   template <typename T>
   inline T readProto(int fd, bool timeout) {
@@ -29,15 +30,17 @@ class SocketHandler {
     string s;
     t.SerializeToString(&s);
     int64_t length = s.length();
-    writeAll(fd, &length, sizeof(int64_t), timeout);
-    writeAll(fd, &s[0], length, timeout);
+    writeAllOrThrow(fd, &length, sizeof(int64_t), timeout);
+    writeAllOrThrow(fd, &s[0], length, timeout);
   }
 
   virtual int connect(const std::string& hostname, int port) = 0;
-  virtual int listen(int port) = 0;
-  virtual void stopListening() = 0;
+  virtual void listen(int port) = 0;
+  virtual set<int> getPortFds(int port) = 0;
+  virtual int accept(int fd) = 0;
+  virtual void stopListening(int port) = 0;
   virtual void close(int fd) = 0;
 };
-}
+}  // namespace et
 
 #endif  // __ETERNAL_TCP_SOCKET_HANDLER__

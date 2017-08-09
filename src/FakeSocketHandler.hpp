@@ -19,8 +19,13 @@ class FakeSocketHandler : public SocketHandler {
   virtual ssize_t read(int fd, void* buf, size_t count);
   virtual ssize_t write(int fd, const void* buf, size_t count);
   virtual int connect(const std::string& hostname, int port);
-  virtual int listen(int port);
-  virtual void stopListening();
+  virtual void listen(int port);
+  inline virtual set<int> getPortFds(int port) {
+    set<int> s;
+    return s;
+  }
+  virtual int accept(int fd);
+  virtual void stopListening(int port);
   virtual void close(int fd);
 
   void push(int fd, const char* buf, size_t count);
@@ -35,6 +40,6 @@ class FakeSocketHandler : public SocketHandler {
   int nextFd;
   vector<int> futureConnections;
 };
-}
+}  // namespace et
 
 #endif  // __ETERNAL_TCP_FAKE_SOCKET_HANDLER__

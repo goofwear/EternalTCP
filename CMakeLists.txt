@@ -5,9 +5,10 @@ option(BUILD_TEST "Build all unit test" OFF)
 option(BUILD_PACKAGE "Builds the package" OFF)
 
 
-set (${PROJECT_NAME}_VERSION_MAJOR 3)
+set (${PROJECT_NAME}_VERSION_MAJOR 4)
 set (${PROJECT_NAME}_VERSION_MINOR 0)
-set (${PROJECT_NAME}_VERSION_PATCH 6)
+set (${PROJECT_NAME}_VERSION_PATCH 4)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DET_VERSION='\"${EternalTCP_VERSION_MAJOR}.${EternalTCP_VERSION_MINOR}.${EternalTCP_VERSION_PATCH}\"'")
 
 IF(BUILD_TEST)
   add_subdirectory(${CMAKE_SOURCE_DIR}/cmake/external/googletest)
@@ -28,12 +29,20 @@ find_package(GFlags REQUIRED)
 find_package(Protobuf REQUIRED)
 find_package(Sodium REQUIRED)
 find_package(SELinux)
+find_package(UTempter)
 
 IF(SELINUX_FOUND)
   SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_SELINUX")
 ELSE()
   SET(SELINUX_INCLUDE_DIR "")
   SET(SELINUX_LIBRARIES "")
+ENDIF()
+
+IF(UTEMPTER_FOUND)
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DWITH_UTEMPTER")
+ELSE()
+  SET(UTEMPTER_INCLUDE_DIR "")
+  SET(UTEMPTER_LIBRARIES "")
 ENDIF()
 
 PROTOBUF_GENERATE_CPP(
@@ -54,6 +63,7 @@ include_directories(
   ${GFLAGS_INCLUDE_DIRS}
   ${GLOG_INCLUDE_DIRS}
   ${SELINUX_INCLUDE_DIR}
+  ${UTEMPTER_INCLUDE_DIR}
   )
 
 set(${PROJECT_NAME}_SRC
@@ -97,15 +107,20 @@ add_library(
   TerminalCommon
   STATIC
 
-  terminal/ConsoleUtils.cpp
+  terminal/SystemUtils.cpp
   terminal/SocketUtils.cpp
-  terminal/IdPasskeyHandler.cpp
 
   ${ETERMINAL_SRCS} ${ETERMINAL_HDRS}
   )
 add_dependencies(TerminalCommon EternalTCP-static)
 
-add_executable (etserver terminal/TerminalServer.cpp)
+add_executable (
+  etserver
+  terminal/TerminalServer.cpp
+  terminal/PortForwardServerHandler.cpp
+  terminal/UserTerminalHandler.cpp
+  terminal/UserTerminalRouter.cpp
+  )
 target_link_libraries (
   etserver
   LINK_PUBLIC
@@ -117,6 +132,7 @@ target_link_libraries (
   ${GFLAGS_LIBRARIES}
   ${sodium_LIBRARY_RELEASE}
   ${SELINUX_LIBRARIES}
+  ${UTEMPTER_LIBRARIES}
   resolv
   util
   )
@@ -124,6 +140,8 @@ target_link_libraries (
 add_executable (
   etclient
   terminal/TerminalClient.cpp
+  terminal/PortForwardClientRouter.cpp
+  terminal/PortForwardClientListener.cpp
   )
 target_link_libraries (
   etclient
@@ -135,6 +153,7 @@ target_link_libraries (
   ${GLOG_LIBRARIES}
   ${GFLAGS_LIBRARIES}
   ${sodium_LIBRARY_RELEASE}
+  ${UTEMPTER_LIBRARIES}
   resolv
   util
   )

@@ -5,29 +5,24 @@ ServerConnection::ServerConnection(
     shared_ptr<ServerConnectionHandler> _serverHandler)
     : socketHandler(_socketHandler),
       port(_port),
-      serverHandler(_serverHandler),
-      stop(false)
-{
+      serverHandler(_serverHandler) {
+  socketHandler->listen(port);
 }
 
 ServerConnection::~ServerConnection() {}
 
-void ServerConnection::run() {
-  while (!stop) {
-    VLOG_EVERY_N(2, 30) << "Listening for connection" << endl;
-    int clientSocketFd = socketHandler->listen(port);
-    if (clientSocketFd < 0) {
-      sleep(1);
-      continue;
-    }
-    VLOG(1) << "SERVER: got client socket fd: " << clientSocketFd << endl;
-    clientHandler(clientSocketFd);
+void ServerConnection::acceptNewConnection(int fd) {
+  VLOG(1) << "Accepting connection";
+  int clientSocketFd = socketHandler->accept(fd);
+  if (clientSocketFd < 0) {
+    return;
   }
+  VLOG(1) << "SERVER: got client socket fd: " << clientSocketFd << endl;
+  clientHandler(clientSocketFd);
 }
 
 void ServerConnection::close() {
-  stop = true;
-  socketHandler->stopListening();
+  socketHandler->stopListening(port);
   for (const auto& it : clientConnections) {
     it.second->closeSocket();
   }
@@ -42,13 +37,15 @@ void ServerConnection::clientHandler(int clientSocketFd) {
     {
       int version = request.version();
       if (version != PROTOCOL_VERSION) {
-        LOG(ERROR) << "Got a client request but the client version does not match.  Client: " <<
-            version << " != Server: " << PROTOCOL_VERSION;
+        LOG(ERROR) << "Got a client request but the client version does not "
+                      "match.  Client: "
+                   << version << " != Server: " << PROTOCOL_VERSION;
         et::ConnectResponse response;
 
         std::ostringstream errorStream;
-        errorStream << "Mismatched protocol versions.  Client: "
-                    << request.version() << " != Server: " << PROTOCOL_VERSION;
+        errorStream << "Mismatched protocol versions.  "
+                    << "Your client & server must be on the same version of ET.  "
+                    << "Client: " << request.version() << " != Server: " << PROTOCOL_VERSION;
         response.set_status(MISMATCHED_PROTOCOL);
         response.set_error(errorStream.str());
         socketHandler->writeProto(clientSocketFd, response, true);
@@ -70,7 +67,6 @@ void ServerConnection::clientHandler(int clientSocketFd) {
 
       socketHandler->close(clientSocketFd);
     } else if (!clientConnectionExists(clientId)) {
-
       et::ConnectResponse response;
       response.set_status(NEW_CLIENT);
       socketHandler->writeProto(clientSocketFd, response, true);
@@ -100,18 +96,16 @@ void ServerConnection::clientHandler(int clientSocketFd) {
   }
 }
 
-void ServerConnection::newClientConnection(
-    const string& clientId,
-    int socketFd) {
+void ServerConnection::newClientConnection(const string& clientId,
+                                           int socketFd) {
   VLOG(1) << "Created client with id " << clientId << endl;
 
-  shared_ptr<ServerClientConnection> scc(
-      new ServerClientConnection(socketHandler, clientId, socketFd, clientKeys[clientId]));
+  shared_ptr<ServerClientConnection> scc(new ServerClientConnection(
+      socketHandler, clientId, socketFd, clientKeys[clientId]));
   clientConnections.insert(std::make_pair(clientId, scc));
 }
 
-bool ServerConnection::removeClient(
-    const string &id) {
+bool ServerConnection::removeClient(const string& id) {
   if (clientKeys.find(id) == clientKeys.end()) {
     return false;
   }
@@ -124,4 +118,4 @@ bool ServerConnection::removeClient(
   clientConnections.erase(id);
   return true;
 }
-}
+}  // namespace et

@@ -6,14 +6,18 @@
 using namespace et;
 ServerConnection* globalServer;
 
-void runServer(std::shared_ptr<ServerConnection> server) { server->run(); }
+void runServer(std::shared_ptr<ServerConnection> server) {
+  while (true) {
+    server->acceptNewConnection(1);
+  }
+}
 
 void runClient(std::shared_ptr<FakeSocketHandler> clientSocket,
                std::array<char, 4 * 1024> s) {
   printf("Creating client\n");
-  shared_ptr<ClientConnection> client =
-      shared_ptr<ClientConnection>(new ClientConnection(
-          clientSocket, "localhost", 1000, "me", "12345678901234567890123456789012"));
+  shared_ptr<ClientConnection> client = shared_ptr<ClientConnection>(
+      new ClientConnection(clientSocket, "localhost", 1000, "me",
+                           "12345678901234567890123456789012"));
   while (true) {
     try {
       client->connect();
@@ -71,10 +75,9 @@ int main(int argc, char** argv) {
   s[4 * 1024 - 1] = 0;
 
   printf("Creating server\n");
-  shared_ptr<ServerConnection> server =
-      shared_ptr<ServerConnection>(new ServerConnection(
-          serverSocket, 1000, NULL));
-  server->addClientKey("me","12345678901234567890123456789012");
+  shared_ptr<ServerConnection> server = shared_ptr<ServerConnection>(
+      new ServerConnection(serverSocket, 1000, NULL));
+  server->addClientKey("me", "12345678901234567890123456789012");
   globalServer = server.get();
 
   thread serverThread(runServer, server);

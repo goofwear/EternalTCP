@@ -8,6 +8,9 @@ TMP_DIR=${TMPDIR:-${TMP:-${TEMP:-/tmp}}}
 LOG_DIR=$TMP_DIR
 VERBOSITY=""
 INITIAL_COMMAND=""
+TUNNEL=""
+SERVER_BINARY="etserver"
+CLIENT_BINARY="etclient"
 
 for i in "$@"
 do
@@ -36,17 +39,29 @@ do
             INITIAL_COMMAND="${i#*=}"
             shift
             ;;
+        -t=*|--tunnel=*)
+            TUNNEL="${i#*=}"
+            shift
+            ;;
+        --version)
+            etclient --version
+            exit 0
+            shift
+            ;;
         -h|--help)
             printf "et (options) [user@]hostname[:port]
 
 Options:
 -h Basic usage
 -s Special ssh command if necessary, otherwise set to user@hostname:22
+   example: et -s '-p 8888 user@hostname' user@hostname:8080 (et running on port 8080)
 -p Port for etserver to run on.  Don't set to the same port as ssh.  Default: 2022
 -u Username to connect to ssh & ET
 -l Directory where log files will go
 -v verbose log files
 -c Initial command to execute upon connecting
+-t Map local to remote TCP port (TCP Tunneling)
+   example: et -t=\"18000:8000\" user@hostname maps localhost:18000 to hostname:8000
 "
             exit 0
             ;;
@@ -82,22 +97,21 @@ if [[ -z "$SSH_COMMAND" ]]; then
     SSH_COMMAND=${USER}@${HOSTNAME}
 fi
 
-SERVER_BINARY="etserver"
-CLIENT_BINARY="etclient"
-
-PASSWORD_GENERATOR="env LC_ALL=C tr -dc \"a-zA-Z0-9\" < /dev/urandom | head -c 32"
-ID_GENERATOR=${PASSWORD_GENERATOR}
+CLIENT_TERM=$TERM
+PASSKEY_GENERATOR="env LC_ALL=C tr -dc \"a-zA-Z0-9\" < /dev/urandom | head -c 32"
+ID_GENERATOR="env LC_ALL=C tr -dc \"a-zA-Z0-9\" < /dev/urandom | head -c 16"
 TMPFILE=$(mktemp "$TMP_DIR"/et-client.XXXXXXXXXXXX)
-SSH_PASSWORD_COMMAND="
+SSH_SCRIPT="
 SERVER_TMP_DIR=\${TMPDIR:-\${TMP:-\${TEMP:-/tmp}}}
 TMPFILE=\$(mktemp \"\$SERVER_TMP_DIR\"/et-server.XXXXXXXXXXXX)
-PASSWORD=\$(env LC_ALL=C tr -dc \"a-zA-Z0-9\" < /dev/urandom | head -c 32)
+PASSKEY=\$($PASSKEY_GENERATOR)
 ID=\$($ID_GENERATOR)
-printf \"%s/%s\\n\" \"\$ID\" \"\$PASSWORD\" > \"\${TMPFILE}\"
-$SERVER_BINARY --idpasskeyfile=\"\${TMPFILE}\" && printf \"PASSWORD:%s/%s\\n\" \"\$ID\" \"\$PASSWORD\"
+printf \"%s/%s\\n\" \"\$ID\" \"\$PASSKEY\" > \"\${TMPFILE}\"
+export TERM=$CLIENT_TERM
+$SERVER_BINARY --idpasskeyfile=\"\${TMPFILE}\"
 true
 "
-SSH_OUTPUT=$(printf "%s\n" "$SSH_PASSWORD_COMMAND" | ssh -T $SSH_COMMAND '/bin/bash')
+SSH_OUTPUT=$(printf "%s\n" "$SSH_SCRIPT" | ssh -T $SSH_COMMAND '/bin/bash')
 
 SSH_EXIT_STATUS=$?
 
@@ -107,14 +121,14 @@ then
     exit $SSH_EXIT_STATUS
 fi
 
-PASSKEY=$(printf "%s" "$SSH_OUTPUT" | grep PASSWORD: | cut -d: -f2)
-if [ -z "$PASSKEY" ]
+IDPASSKEY=$(printf "%s" "$SSH_OUTPUT" | grep IDPASSKEY: | cut -d: -f2)
+if [ -z "$IDPASSKEY" ]
 then
     echo "Error communicating with ET daemon."
     echo "${SSH_OUTPUT}"
 else
-    echo "${PASSKEY}" > "${TMPFILE}"
-    PASSKEY=""
+    echo "${IDPASSKEY}" > "${TMPFILE}"
+    IDPASSKEY=""
     SSH_OUTPUT=""
-    $CLIENT_BINARY --idpasskeyfile="$TMPFILE" $VERBOSITY --host="$HOSTNAME" --port="$PORT" --log_dir="$LOG_DIR" --command="$INITIAL_COMMAND" 2> /tmp/etclient_err
+    $CLIENT_BINARY --idpasskeyfile="$TMPFILE" $VERBOSITY --host="$HOSTNAME" --port="$PORT" --log_dir="$LOG_DIR" --command="$INITIAL_COMMAND" --portforward="$TUNNEL" 2> /tmp/etclient_err
 fi

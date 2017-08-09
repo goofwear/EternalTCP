@@ -31,34 +31,30 @@ class ServerConnection {
     return clientConnections.find(clientId) != clientConnections.end();
   }
 
-  void run();
+  inline shared_ptr<SocketHandler> getSocketHandler() { return socketHandler; }
+
+  void acceptNewConnection(int fd);
 
   void close();
 
-  inline void addClientKey(
-      const string& id,
-      const string& key) {
-    clientKeys[id] = key;
+  inline void addClientKey(const string& id, const string& passkey) {
+    clientKeys[id] = passkey;
   }
 
   void clientHandler(int clientSocketFd);
 
-  void newClientConnection(
-      const string& clientId,
-      int socketFd);
+  void newClientConnection(const string& clientId, int socketFd);
 
   bool removeClient(const string& id);
 
-  shared_ptr<ServerClientConnection> getClientConnection(const string& clientId) {
-    return clientConnections.find(clientId)->second;
-  }
-
-  unordered_set<string> getClientIds() {
-    unordered_set<string> retval;
-    for (auto it : clientKeys) {
-      retval.insert(it.first);
+  shared_ptr<ServerClientConnection> getClientConnection(
+      const string& clientId) {
+    auto it = clientConnections.find(clientId);
+    if (it == clientConnections.end()) {
+      LOG(FATAL)
+          << "Error: Tried to get a client connection that doesn't exist";
     }
-    return retval;
+    return it->second;
   }
 
  protected:
@@ -67,9 +63,9 @@ class ServerConnection {
   shared_ptr<ServerConnectionHandler> serverHandler;
   bool stop;
   std::unordered_map<string, string> clientKeys;
-  std::unordered_map<string, shared_ptr<ServerClientConnection> > clientConnections;
-  shared_ptr<thread> clientConnectThread;
+  std::unordered_map<string, shared_ptr<ServerClientConnection> >
+      clientConnections;
 };
-}
+}  // namespace et
 
 #endif  // __ETERNAL_TCP_SERVER_CONNECTION__
